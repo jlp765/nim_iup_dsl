@@ -6,7 +6,7 @@ Nim Domain Specific Language for building a GUI in the NIM programing language u
 Requires V3.0 of IUP library  (iup30.dll for win or libiup3.0.so for Linux).
 It probably works with lower versions, but uses some V3.0 or higher functionality.
 
-Unfortunately, the current IUP wrapper for Nim is 3.0 or older, 
+Unfortunately, the current IUP wrapper for Nim is IUP V3.0 or older, 
 so DO NOT use newer version of IUP until the wrapper in Nim is updated.
 
 # Limitations
