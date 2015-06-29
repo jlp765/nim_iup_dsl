@@ -3,6 +3,7 @@ import
 
 ###################################### Engine
 ############ Stack layout
+ 
 var
   gstack : seq[PIhandle] = @[]
   glastWidget : PIhandle
@@ -14,29 +15,35 @@ var
   textInitialStr: seq[PIhandle] = @[]
   hasIdle: bool = false
   
-
-proc toCB(fp: proc): Icallback {.inline.} = return cast[Icallback](fp)
-
-proc nulProc(ih:PIhandle): cint {.cdecl.} = 
+proc nulProc*(w:PIhandle): cint {.cdecl, procvar.} = 
   echo "e"
   return IUP_DEFAULT
   
-proc nulToggleProc(ih:PIhandle, state: cint): cint {.cdecl.} = 
+proc nulToggleProc*(w:PIhandle, state: cint): cint {.cdecl, procvar.} = 
   echo "toggle: ",state
   return IUP_DEFAULT
   
-proc nulListProc(ih:PIhandle, txt: cstring, itm, state: cint): cint {.cdecl.} = 
+proc nulListProc*(w:PIhandle, txt: cstring, itm, state: cint): cint {.cdecl, procvar.} = 
   echo "list: text: ",txt, " item: ", itm, " state: ", state
   return IUP_DEFAULT
   
-proc nulTextProc(ih:PIhandle, c: cint, newValue: cstring): cint {.cdecl.} = 
+proc nulTextProc*(w:PIhandle, c: cint, newValue: cstring): cint {.cdecl, procvar.} = 
   echo "text: ",newValue," c: ",c
   return IUP_DEFAULT
 
-proc nulCanvasProc(ih:PIhandle, posX, posY: cfloat): cint {.cdecl.} = 
+proc nulCanvasProc*(w:PIhandle, posX, posY: cfloat): cint {.cdecl, procvar.} = 
   echo "canvas: pos: ", posX, ", ", posY
   return IUP_DEFAULT
-  
+
+proc toCB*(fp = nulProc): Icallback {.cdecl.} = return cast[Icallback](fp)
+proc toCBToggle*(fp = nulToggleProc): Icallback {.cdecl.} = return cast[Icallback](fp)
+proc toCBList*(fp = nulListProc): Icallback {.cdecl.} = return cast[Icallback](fp)
+proc toCBText*(fp = nulTextProc): Icallback = return cast[Icallback](fp)
+proc toCBCanvas*(fp = nulCanvasProc): Icallback = return cast[Icallback](fp)
+
+proc toYesNo(b: bool): string {.inline.} =  (result = (if b: "yes" else: "no"))
+assert toYesNo(false) == "no"
+
 ###
 proc last*[T](st: seq[T]) : T {.inline.} =
   result = st[st.high]
@@ -47,9 +54,8 @@ proc lastPos*() : int {.inline.} =
 proc getWin*() : PIhandle {.inline.} =
   result = gstack[0]
   
-proc push[T](st: var seq[T], e: T) : T {.discardable.} =
+proc push*[T](st: var seq[T], e: T) : T {.discardable.} =
   st.add(e)
-  echo "push"
   result = e
 # pop already defined ...
 
@@ -59,34 +65,31 @@ proc option*(w: PIhandle, which, valu: string): PIhandle {.discardable.} =
     wS = which.toUpper()
     # not all values as upperCase
     vS = if wS in ["TITLE", "TEXT", "VALUESTRING"]: valu else: valu.toUpper()
-  w.setAttribute(wS.cstring, vS.cstring)
+  w.setAttribute(wS, vS)
   result = w
 
 proc option*(which, valu: string): PIhandle {.discardable, inline.} =
   # use last pushed widget as widget to have option set
   result = glastWidget.option(which.toUpper(), valu.toUpper())
 
-proc appendW(w: PIhandle) : void =
+proc appendW*(w: PIhandle) : void =
   glastWidget = w
   gstack.add(w)
   discard setHandle("item" & $lastPos(), w)
   w.option("padding", "0x0")
   w.option("expand","yes")
-  echo "appendW: after stackSize: ", gstack.len
 
-proc appendWi(w: PIhandle): void = 
+proc appendWi*(w: PIhandle): void = 
   glastWidget = w
   gstack.add(w)
   discard setHandle("item" & $lastPos(), w)
   w.option("padding", "10x10")
   w.option("EXPAND","no")
-  echo "appendWi: after stackSize: ", gstack.len
 
-template apply(w: PIhandle, code: stmt) : stmt {.immediate.} =
+template apply*(w: PIhandle, code: stmt) : stmt {.immediate.} =
   # margin inside, and items have no padding
   var contentPos = gstack.len   # items after the current last
   code          # widgets are added to the stack
-  echo "Code stackSize: ", contentPos
   for i in contentPos .. gstack.len-1:
     iup.append(w, gstack[i])
   w.option("margin", "0x0")
@@ -95,11 +98,10 @@ template apply(w: PIhandle, code: stmt) : stmt {.immediate.} =
     discard gstack.pop()   
   glastWidget = gstack.last
 
-template applyi(w: PIhandle, code: stmt) : stmt {.immediate.} =
+template applyi*(w: PIhandle, code: stmt) : stmt {.immediate.} =
   # no margin in here because items have their own padding
   var contentPos = gstack.len   # items after the current last
   code          # widgets are added to the stack
-  echo "Code stackSize: ", contentPos
   for i in contentPos .. gstack.len-1:
     iup.append(w, gstack[i])
   w.option("margin", "10x10")
@@ -108,36 +110,32 @@ template applyi(w: PIhandle, code: stmt) : stmt {.immediate.} =
     discard gstack.pop()   
   glastWidget = gstack.last
   
-template anim*(w: PIhandle, ms: int, pproc: proc) : stmt {.immediate.} =
-  #discard g_timeout_add(ms, pproc,0)
+template anim*(w: PIhandle, ms: int, pproc = nulProc) : stmt {.immediate.} =
   discard setCallback(w, "ACTION", toCB(pproc))
-  setAttribute(w, "TIME".cstring, ($ms).cstring)
-  setAttribute(w, "RUN".cstring, "YES".cstring)
+  setAttribute(w, "TIME", $ms)
+  setAttribute(w, "RUN", "YES")
   
-proc after*(ms: int, pproc: proc): PIhandle =
+proc after(ms: int, pproc = nulProc): PIhandle {.cdecl.} =
   let n = timerId
   inc timerId
   var t = iup.timer()
   discard iup.setHandle("iupTimer" & $n, t)
-  t.setAttribute("TIME".cstring, ($ms).cstring)
-  t.setAttribute("RUN".cstring, "YES".cstring)
+  t.setAttribute("TIME", $ms)
+  t.setAttribute("RUN", "YES")
   discard t.setCallback("ACTION_CB", toCB(pproc))
   result = t
 
-proc onceProc(w: PIhandle): cint =
+proc onceProc(w: PIhandle): cint {.cdecl, gcsafe, locks: 0.} =
   w.setAttribute("RUN","NO")
   var p: Icallback = afterOnceCallbacks.mget($(w.getName()))
-  #echo w.getName(), " calling the callback"
-  #echo "Proc is: ",repr(afterOnceCallbacks.mget($(w.getName())))
   try:
-    discard toCB(afterOnceCallbacks.mget($(w.getName())))(w)
+    discard p(w)
   except:
-    echo "Error running callback: ", w.getName()
     discard
   afterOnceCallbacks.del($(w.getName()))
   return IUP_DEFAULT
 
-proc afterOnce*(ms: int, pproc: proc): PIhandle =
+proc afterOnce*(ms: int, pproc = nulProc): PIhandle =
   let n = timerId
   inc timerId
   var t = iup.timer()
@@ -153,12 +151,11 @@ proc stopTimer*(p: PIhandle) =
 
 proc startTimer*(p: PIhandle; ms: int = 0) =  
   if ms > 0:
-    echo "setting time to :", ms
     p.setAttribute("TIME", $ms)
   # must set running AFTER time has been changed, not before!!
-  p.setAttribute("RUN","Yes")
+  p.setAttribute("RUN","YES")
 
-proc doIdleProcessing(w: PIhandle): cint {.cdecl.} =
+proc doIdleProcessing(w: PIhandle): cint {.cdecl, gcsafe, locks: 0.} =
   if not hasIdle: return IUP_DEFAULT
   var rem: seq[int] = @[]
   var res: int = 0
@@ -169,7 +166,6 @@ proc doIdleProcessing(w: PIhandle): cint {.cdecl.} =
     if idleCallbacksIndx >= whenIdleCallbacks.len:
       idleCallbacksIndx = 0
     res = (whenIdleCallbacks[idleCallbacksIndx])(w)
-    #echo "idel res: ", res, " default: ", IUP_DEFAULT
     if res != IUP_DEFAULT:
       whenIdleCallbacks.delete(idleCallbacksIndx)
     else:
@@ -178,21 +174,18 @@ proc doIdleProcessing(w: PIhandle): cint {.cdecl.} =
       iup.exitLoop()
   return IUP_DEFAULT
       
-proc whenIdle*(pproc: proc) =
-  #echo "Setting Idle function"
-  if pproc != nulProc:
-    hasIdle = true
-    whenIdleCallbacks.add(toCB(pproc))
+proc whenIdle*(pproc = nulProc) =
+  hasIdle = true
+  whenIdleCallbacks.add(toCB(pproc))
     
-proc whenIdleOnce*(pproc: proc) =
-  if pproc != nulProc:
-    hasIdle = true
-    whenIdleOnceCallbacks.add(toCB(pproc))
+proc whenIdleOnce*(pproc = nulProc) =
+  hasIdle = true
+  whenIdleOnceCallbacks.add(toCB(pproc))
   
 proc mainQuit*(widget: PIhandle): cint {.cdecl.} =
   return IUP_CLOSE
 
-proc mainQuitAsk*(widget: PIhandle): cint {.cdecl.} =
+proc mainQuitAsk*(widget: PIhandle): cint {.cdecl, gcsafe, locks: 0.} =
   if iup.alarm("Exit?", "Exit now?","Yes","No",nil) == 1:
     return IUP_CLOSE
   return IUP_IGNORE
@@ -205,7 +198,6 @@ template iup_app_content(code: stmt) : stmt {.immediate.} =
   gstack.push(win)
   discard setHandle("item0", win)
   appendW(content)
-  echo "Dialog\n","vbox"
   apply(content, code)
 
 template iup_app_run(win: PIhandle) : stmt {.immediate.} =
@@ -219,10 +211,8 @@ template iup_app_run(win: PIhandle) : stmt {.immediate.} =
       s = PIh.getAttribute("USERVALUE")
       ss = PIh.getAttribute("SPINUSERVALUE")
     if not isNil(ss):
-      echo "SS: ",ss
       PIh.setAttribute("SPINVALUE", ss)
     else:
-      echo "S: ",s
       PIh.setAttribute("INSERT", s)
   textInitialStr = @[]
   # do it
@@ -247,18 +237,11 @@ template iup_app*(title: string,
   w.option("TITLE", "IUP: " & title)
   iup_app_run(w)
   
-proc CPWIDGET*(obj: pointer): PIhandle {.inline.} =
-  result = cast[PIhandle](obj)
-
-proc CPBOX*(obj: pointer): PIhandle {.inline.} =
-  result = cast[PIhandle](obj)
-
 ######################################## Layout
 
 template stack*(code: stmt): stmt {.immediate.} =
   let content = iup.vbox(nil)
   appendW(content)
-  echo "vbox"
   content.apply(code)
   
 template stackFrame*(title: string, code: stmt): stmt {.immediate.} =
@@ -266,7 +249,6 @@ template stackFrame*(title: string, code: stmt): stmt {.immediate.} =
   let fr = iup.frame(content)
   appendW(fr)
   appendW(content)
-  echo "frame\nvbox"
   content.apply(code)
   discard gstack.pop()    # remove vbox and leave fr as last entry
   glastWidget = fr
@@ -275,7 +257,6 @@ template stackFrame*(title: string, code: stmt): stmt {.immediate.} =
 template flow*(code: stmt): stmt {.immediate.} =
   let content = iup.hbox(nil)
   appendW(content)
-  echo "hbox"
   content.apply(code)
 
 template flowFrame*(title: string, code: stmt): stmt {.immediate.} =
@@ -284,7 +265,6 @@ template flowFrame*(title: string, code: stmt): stmt {.immediate.} =
   fr.setAttribute("TITLE", title)
   appendW(fr)
   appendW(content)
-  echo "frame\nhbox"
   content.apply(code)
   discard gstack.pop()    # remove hbox and leave fr as last entry
   glastWidget = fr
@@ -292,7 +272,6 @@ template flowFrame*(title: string, code: stmt): stmt {.immediate.} =
 template stacki*(code: stmt): stmt {.immediate.} =
   let content = iup.vbox(nil)
   appendWi(content)
-  echo "vbox"
   applyi(content, code)
 
 template stackFramei*(title: string, code: stmt): stmt {.immediate.} =
@@ -300,7 +279,6 @@ template stackFramei*(title: string, code: stmt): stmt {.immediate.} =
   let fr = iup.frame(content)
   appendWi(fr)
   appendWi(content)
-  echo "frame\nvbox"
   content.applyi(code)
   discard gstack.pop()    # remove vbox and leave fr as last entry
   glastWidget = fr
@@ -309,7 +287,6 @@ template stackFramei*(title: string, code: stmt): stmt {.immediate.} =
 template flowi*(code: stmt): stmt {.immediate.} =
   let content = iup.hbox(nil)
   appendWi(content)
-  echo "hbox"
   applyi(content, code)
 
 template flowFramei*(title: string, code: stmt): stmt {.immediate.} =
@@ -318,38 +295,36 @@ template flowFramei*(title: string, code: stmt): stmt {.immediate.} =
   fr.option("title", title)
   appendWi(fr)
   appendWi(content)
-  echo "frame\nhbox"
   content.applyi(code)
   discard gstack.pop()    # remove hbox and leave fr as last entry
   glastWidget = fr
   
 discard """
-################################################## Canvas
-var gcurrentCanvas : PIhandle
+    ################################################## Canvas
+    var gcurrentCanvas : PIhandle
 
-template canvas(width, height: int, actn = nulCanvasProc, code: stmt) : stmt {.immediate.} =
-  let c = iup.canvas(nil)
-  if f != nulProc:
-    discard setCallback(c, "ACTION", toCB(actn))
-  if sloti:   appendWi(c) else:  appendW(c)
-  echo "canvas"
-  glastWidget = c
-  
+    template canvas(width, height: int, actn = nulCanvasProc, code: stmt) : stmt {.immediate.} =
+      let c = iup.canvas(nil)
+      if f != nulProc:
+        discard setCallback(c, "ACTION", toCBCanvas(actn))
+      if sloti:   appendWi(c) else:  appendW(c)
+      glastWidget = c
+      
 
-template handle_expose(pproc: proc) : stmt {.immediate.} =
-  discard gcurrentCanvas.signal_connect( "expose-event", SIGNAL_FUNC(pproc), gcurrentCanvas.window)
+    template handle_expose(pproc: proc) : stmt {.immediate.} =
+      discard gcurrentCanvas.signal_connect( "expose-event", SIGNAL_FUNC(pproc), gcurrentCanvas.window)
 
-template handle_button_press(pproc: proc) : stmt {.immediate.} =
-  discard gcurrentCanvas.signal_connect( "button-press-event", SIGNAL_FUNC(pproc), gcurrentCanvas.window)
+    template handle_button_press(pproc: proc) : stmt {.immediate.} =
+      discard gcurrentCanvas.signal_connect( "button-press-event", SIGNAL_FUNC(pproc), gcurrentCanvas.window)
 
-template handle_button_motion(pproc: proc) : stmt {.immediate.} =
-  discard gcurrentCanvas.signal_connect( "motion-notify-event", SIGNAL_FUNC(pproc), gcurrentCanvas.window)
+    template handle_button_motion(pproc: proc) : stmt {.immediate.} =
+      discard gcurrentCanvas.signal_connect( "motion-notify-event", SIGNAL_FUNC(pproc), gcurrentCanvas.window)
 
-template handle_button_release(pproc: proc) : stmt {.immediate.} =
-  discard gcurrentCanvas.signal_connect( "button-release-event", SIGNAL_FUNC(pproc), gcurrentCanvas.window)
+    template handle_button_release(pproc: proc) : stmt {.immediate.} =
+      discard gcurrentCanvas.signal_connect( "button-release-event", SIGNAL_FUNC(pproc), gcurrentCanvas.window)
 
-template handle_Timer(ms: int,pproc: proc) : stmt {.immediate.} =
-  discard g_timeout_add(ms, pproc, gcurrentCanvas.window)
+    template handle_Timer(ms: int,pproc: proc) : stmt {.immediate.} =
+      discard g_timeout_add(ms, pproc, gcurrentCanvas.window)
 """
 
 ################################################## Widgets
@@ -364,7 +339,6 @@ proc bbutton(label, image: string, f = nulProc, sloti: bool): PIhandle {.discard
   if f != nulProc:
     discard setCallback(btn, "ACTION", toCB(f))
   if sloti:   appendWi(btn) else:  appendW(btn)
-  echo "button"
   return glastWidget
 
 proc button*(label: string, f = nulProc): PIhandle {.discardable.} =
@@ -384,7 +358,6 @@ proc buttoni*(label, image: string; f = nulProc): PIhandle {.discardable.}  =
 proc blabel(label: string, sloti: bool): PIhandle {.discardable.} =
   let lbl = iup.label(label)
   if sloti:   appendWi(lbl) else:  appendW(lbl)
-  echo "label"
   return glastWidget
 
 proc label*(label: string): PIhandle {.discardable.} =
@@ -395,64 +368,70 @@ proc labeli*(label: string): PIhandle {.discardable.} =
 
 #####  List
   
-proc blist(data: openArray[string], f = nulListProc, sloti = false, 
-            multiSelect = false, ddn = false, editBox = false,
+proc blist(data: openArray[string], f = nulListProc; sloti = false; 
+            multiSelect = false; ddn = false; editBox = false;
             sort = false): PIhandle {.discardable.} =
   let lst = iup.list(nil)
   if f != nulListProc:
-    lst.setCallback("ACTION", toCB(f))
+    lst.setCallback("ACTION", toCBList(f))
   if sloti:   appendWi(lst) else:  appendW(lst)
-  lst.option("multiple", $multiSelect).option("dropdown", $ddn)
+  lst.option("multiple", toYesNo(multiSelect)).option("dropdown", toYesNo(ddn))
   if data.len > 0: 
-    #lst.setAttribute("0", "Select one of the following:".cstring)
+    #lst.setAttribute("0", "Select one of the following:")
     for i,x in pairs(data):
-      lst.setAttribute($(i+1), x.cstring)
-    lst.setAttribute($(data.len+1), "".cstring)
-  lst.option("editbox", $editBox).option("sort", $sort)
-  echo "list"
+      lst.setAttribute($(i+1), x)
+    lst.setAttribute($(data.len+1), "")
+  lst.option("editbox", toYesNo(editBox)).option("sort", toYesNo(sort))
   return glastWidget
 
-proc list*[T](data: openArray[T]; actn = nulListProc; multiSelect = false;
+proc list*[T:int|float](data: openArray[T], actn = nulListProc; multiSelect = false;
             editBox = false; sort = false): PIhandle {.discardable.} =
   var arr: seq[string] = @[]
   for x in data:
     arr.add($x)
-  return blist(arr, actn, false, multiSelect, false, editBox, sort)
-  
-proc listi*(data: openArray[string]; actn = nulListProc; multiSelect = false;
-            editBox = false; sort = false): PIhandle {.discardable, inline.} =
-  return blist(data, actn, true, multiSelect, false, editBox, sort)
+  return blist(arr, actn, sloti=false, multiSelect=multiSelect, ddn=false, 
+                editBox=editBox, sort=sort)
 
-proc listi*[T](data: openArray[T]; actn = nulListProc; multiSelect = false;
+proc list*[T:string](data: openArray[T], actn = nulListProc; multiSelect = false;
+            editBox = false; sort = false): PIhandle {.discardable.} =
+  return blist(data, f=actn, sloti=false, multiSelect=multiSelect, 
+                ddn=false, editBox=editBox, sort=sort)
+  
+#proc listi*(data: openArray[string], actn = nulListProc; multiSelect = false;
+#            editBox = false; sort = false): PIhandle {.discardable, inline.} =
+#  return blist(data, actn, true, multiSelect, false, editBox, sort)
+
+proc listi*[T](data: openArray[T], actn = nulListProc; multiSelect = false;
             editBox = false; sort = false): PIhandle {.discardable.} =
   var arr: seq[string] = @[]
   for x in data:
     arr.add($x)
-  return blist(arr, actn, true, multiSelect, false, editBox, sort)
+  return blist(arr, actn, sloti=true, multiSelect=multiSelect, ddn=false, 
+              editBox=editBox, sort=sort)
 
 #####  DropDown List
 
-proc ddnList*(data: openArray[string]; actn = nulListProc; multiSelect = false;
+proc ddnList*(data: openArray[string], actn = nulListProc; multiSelect = false;
             editBox = false; sort = false): PIhandle {.discardable, inline.} =
-  return blist(data, actn, false, multiSelect, true, editBox, sort)
+  return blist(data, actn, false, multiSelect, ddn=true, editBox=editBox, sort=sort)
 
-proc ddnList*[T](data: openArray[T]; actn = nulListProc; multiSelect = false;
+proc ddnList*[T](data: openArray[T], actn = nulListProc; multiSelect = false;
             editBox = false; sort = false): PIhandle {.discardable.} =
   var arr: seq[string] = @[]
   for x in data:
     arr.add($x)
-  return blist(arr, actn, false, multiSelect, true, editBox, sort)
+  return blist(arr, actn, false, multiSelect, ddn=true, editBox=editBox, sort=sort)
   
-proc ddnListi*(data: openArray[string]; actn = nulListProc; multiSelect = false;
+proc ddnListi*(data: openArray[string], actn = nulListProc; multiSelect = false;
             editBox = false; sort = false): PIhandle {.discardable, inline.} =
-  return blist(data, actn, true, multiSelect, true, editBox, sort)
+  return blist(data, actn, true, multiSelect, ddn=true, editBox=editBox, sort=sort)
 
-proc ddnListi*[T](data: openArray[T]; actn = nulListProc; multiSelect = false;
+proc ddnListi*[T](data: openArray[T], actn = nulListProc; multiSelect = false;
             editBox = false; sort = false): PIhandle {.discardable.} =
   var arr: seq[string] = @[]
   for x in data:
     arr.add($x)
-  return blist(arr, actn, true, multiSelect, true, editBox, sort)
+  return blist(arr, actn, true, multiSelect, ddn=true, editBox=editBox, sort=sort)
 
 ##### Toggle  (checkbox)
 
@@ -460,11 +439,12 @@ proc btoggle(text: string; f = nulToggleProc; sloti = false;
              value = "off"; triState = false): PIhandle {.discardable.} =
   let tggl = iup.toggle(text, nil)  # text is called TITLE in iup
   if f != nulToggleProc:
-    tggl.setCallback("ACTION", toCB(f))
+    tggl.setCallback("ACTION", toCBToggle(f))
   if sloti:   appendWi(tggl) else:  appendW(tggl)
-  tggl.option("3state", $triState)
-  tggl.option("value", $value)
-  echo "toggle (3State: " & $triState & ")"
+  #tggl.option("padding","1x1")
+  tggl.option("value", value)
+  if triState:
+    tggl.option("3state", toYesNo(triState))
   return glastWidget
 
 proc toggle*(text: string; actn = nulToggleProc; 
@@ -472,18 +452,22 @@ proc toggle*(text: string; actn = nulToggleProc;
   result = btoggle(text, actn, false, value=value, triState=triState)
   
 proc toggle*(texts: openArray[string]; actn = nulToggleProc; 
-              value = "off"; triState = false): PIhandle {.discardable.} =
-  for text in texts:
-    result = btoggle(text, actn, false, value=value, triState=triState)
+              values: openArray[string] = @[]; triState = false): PIhandle {.discardable.} =
+  var v: string = ""
+  for i in 0.. texts.len-1:
+    v = (if i >= values.len: "off" else: values[i])
+    result = btoggle(texts[i], actn, false, value=v, triState=triState)
 
 proc togglei*(text: string; actn = nulToggleProc; 
               value = "off"; triState = false): PIhandle {.discardable, inline.} =
   result = btoggle(text, actn, true, value=value, triState=triState)
     
 proc togglei*(texts: openArray[string]; actn = nulToggleProc; 
-              value = "off"; triState = false): PIhandle {.discardable, inline.} =
-  for text in texts:
-    result = btoggle(text, actn, true, value=value, triState=triState)
+              values: openArray[string] = @[]; triState = false): PIhandle {.discardable, inline.} =
+  var v: string = ""
+  for i in 0.. texts.len-1:
+    v = (if i >= values.len: "off" else: values[i])
+    result = btoggle(texts[i], actn, true, value=v, triState=triState)
 
 ##### RadioStack  (needs toggles as children)
 
@@ -492,7 +476,6 @@ template radioStack*(code: stmt): stmt {.immediate.} =
   let rdio = iup.radio(content)
   appendW(rdio)
   appendW(content)
-  echo "radio\nvbox"
   apply(content, code)
   discard gstack.pop()    # remove vbox and leave fr as last entry
   glastWidget = rdio
@@ -502,7 +485,6 @@ template radioStacki*(code: stmt): stmt {.immediate.} =
   let rdio = iup.radio(content)
   appendWi(rdio)
   appendWi(content)
-  echo "radio\nvbox"
   applyi(content, code)
   discard gstack.pop()    # remove vbox and leave fr as last entry
   glastWidget = rdio
@@ -515,7 +497,6 @@ template radioStackFrame*(title: string, code: stmt): stmt {.immediate.} =
   appendW(fr)
   appendW(rdio)
   appendW(content)
-  echo "frame\nradio\nvbox"
   content.apply(code)
   discard gstack.pop()    # remove vbox and leave fr as last entry
   discard gstack.pop()    # remove radio and leave fr as last entry
@@ -528,7 +509,6 @@ template radioStackFramei*(title: string, code: stmt): stmt {.immediate.} =
   fr.option("title", title)
   appendWi(fr)
   appendWi(content)
-  echo "frame\nvbox"
   content.applyi(code)
   discard gstack.pop()    # remove vbox and leave fr as last entry
   discard gstack.pop()    # remove radio and leave fr as last entry
@@ -540,7 +520,6 @@ template radioFlow*(code: stmt): stmt {.immediate.} =
   let rdio = iup.radio(content)
   appendW(rdio)
   appendW(content)
-  echo "radio\nhbox"
   apply(content, code)
   discard gstack.pop()    # remove hbox and leave fr as last entry
   glastWidget = rdio
@@ -550,7 +529,6 @@ template radioFlowi*(code: stmt): stmt {.immediate.} =
   let rdio = iup.radio(content)
   appendWi(rdio)
   appendWi(content)
-  echo "radio\nhbox"
   applyi(content, code)
   discard gstack.pop()    # remove hbox and leave fr as last entry
   glastWidget = rdio
@@ -563,7 +541,6 @@ template radioFlowFrame*(title: string, code: stmt): stmt {.immediate.} =
   appendW(fr)
   appendW(rdio)
   appendW(content)
-  echo "frame\nradio\nhbox"
   content.apply(code)
   discard gstack.pop()    # remove hbox and leave fr as last entry
   discard gstack.pop()    # remove radio and leave fr as last entry
@@ -577,7 +554,6 @@ template radioFlowFramei*(title: string, code: stmt): stmt {.immediate.} =
   appendWi(fr)
   appendWi(rdio)
   appendWi(content)
-  echo "frame\nhbox"
   content.applyi(code)
   discard gstack.pop()    # remove hbox and leave fr as last entry
   discard gstack.pop()    # remove radio and leave fr as last entry
@@ -592,22 +568,20 @@ proc btext(str: string, f = nulTextProc; sloti = false;
             wordWrap = false): PIhandle {.discardable.} =
   let txt = iup.text(nil)
   if f != nulTextProc:
-    txt.setCallback("ACTION", toCB(f))
+    txt.setCallback("ACTION", toCBText(f))
   if sloti:   appendWi(txt) else:  appendW(txt)
-  txt.option("multiline", if multiLine: "yes" else: "no")
+  txt.option("multiline", toYesNo(multiLine))
   if multiLine:
-    txt.option("tabsize", $tabSize)
-    txt.option("scrollbar", scrollbar).option("autohide", if autoHide: "yes" else: "no")
+    txt.option("tabsize", $tabSize).option("wordwrap", toYesNo(wordWrap))
+    txt.option("scrollbar", scrollbar).option("autohide", toYesNo(autoHide))
   else:
-    txt.option("password", if password: "yes" else: "no")
-    #txt.option("size","x20")
-  txt.option("readonly", if readOnly: "yes" else: "no")
-  txt.option("border", if border: "yes" else: "no")
+    txt.option("password", toYesNo(password))
+  txt.option("readonly", toYesNo(readOnly))
+  txt.option("border", toYesNo(border))
   txt.option("nc", $maxChars)
   txt.option("visiblecolumns", $columns).option("visiblelines", $rows)
   txt.setAttribute("USERVALUE", str)    # can only be inserted after iup maps the widget
   textInitialStr.add(txt)
-  echo "text"
   return glastWidget
 
 proc text*(text: string, actn = nulTextProc; multiLine = true;
@@ -668,19 +642,18 @@ proc bspin(str: string, f = nulTextProc; sloti = false; border = true;
           spinAlign = "right"; spinWrap = false; spinAuto = true): PIhandle {.discardable.} =
   let spn = iup.text(nil)
   if f != nulTextProc:
-    spn.setCallback("ACTION", toCB(f))
+    spn.setCallback("ACTION", toCBText(f))
   if sloti:   appendWi(spn) else:  appendW(spn)
   spn.option("spin","yes")
-  spn.option("multiline", "no").option("readonly", if readOnly: "yes" else: "no")
-  spn.option("border", if border: "yes" else: "no")
+  spn.option("multiline", "no").option("readonly", toYesNo(readOnly))
+  spn.option("border", toYesNo(border))
   spn.option("nc", $maxChars)
   spn.option("visiblecolumns", $columns).option("visiblelines", "1")
   spn.option("spinmax", $spinMax).option("spinmin", $spinMin).option("spininc", $spinInc)
-  spn.option("spinalign", $spinAlign).option("spinwrap", $spinWrap)
-  spn.option("spinauto", $spinAuto)
-  spn.setAttribute("SPINUSERVALUE", str.cstring)    # can only be inserted after iup maps the widget
+  spn.option("spinalign", $spinAlign).option("spinwrap", toYesNo(spinWrap))
+  spn.option("spinauto", toYesNo(spinAuto))
+  spn.setAttribute("SPINUSERVALUE", str)    # can only be inserted after iup maps the widget
   textInitialStr.add(spn)
-  echo "spin"
   return glastWidget
 
 proc spin*(text: string, actn = nulTextProc; border = true; 
@@ -702,100 +675,32 @@ proc spini*(text: string, actn = nulTextProc; border = true;
 template notebook*(tabNames = openArray[string], tabType = "top", code: stmt): stmt {.immediate.} =
   let tb = iup.tabs(nil)
   appendW(tb)
-  echo "Notebook"
   tb.option("tabtype", tabType)
-  tb.option("padding","2x2")      # !! warning - needed => causes memory overwriting left as the default 0x0
   tb.apply(code)
   for i in 0 .. tb.getChildCount()-1:
     let x = tb.getChild(i)
     x.option("tabtitle", tabNames[i])
+  tb.option("padding","1x1")      # !! warning - needed => causes memory overwriting left as the default 0x0
 
 template notebooki*(tabNames = openArray[string], tabType = "top", code: stmt): stmt {.immediate.} =
   let tb = iup.tabs(nil)
   appendWi(tb)
-  echo "Notebook"
   tb.option("tabtype", tabType)
-  tb.option("padding","2x2")      # !! warning - needed => causes memory overwriting left as the default 0x0
   tb.applyi(code)
   for i in 0 .. tb.getChildCount()-1:
     let x = tb.getChild(i)
     x.option("tabtitle", tabNames[i])
+  tb.option("padding","1x1")      # !! warning - needed => causes memory overwriting left as the default 0x0
     
 #####  image
 discard """
-proc image(name: string)  =
-  var w = if existsFile(name):
-      iup.image((name)
-    else:
-      imageNewFromStock(name, ICON_SIZE_BUTTON)
-  append( w )
+  proc image(name: string)  =
+    var w = if existsFile(name):
+        iup.image((name)
+      else:
+        imageNewFromStock(name, ICON_SIZE_BUTTON)
+    append( w )
 """
 proc pass*(n: int = 1) =
    label( "                              " )
-   
-when isMainModule:
-  var timer1, timer2, timer3: PIhandle
-  var cnt: int = 0
-  proc btnOkClick(w: PIhandle): cint {.cdecl.} =
-    echo "Ok"
-    return IUP_DEFAULT
-  proc btnCancelClick(w: PIhandle): cint {.cdecl.} =
-    return mainQuit(w)
-  proc tproc(w: PIhandle): cint {.cdecl.} =
-    echo "ping from ", iup.getName(w), "  Cnt: ",cnt
-    #timer1.setAttribute("RUN", "NO")
-    if $(iup.getName(w)) == "iupTimer1": 
-      echo "Stopping timer"
-      #stopTimer("iupTimer1")
-      stopTimer(timer1)
-    return IUP_DEFAULT
-  proc tStartAgain(w: PIhandle): cint {.cdecl.} =
-    startTimer(timer1,2000)
-    return IUP_DEFAULT
-  proc idleF(w: PIhandle): cint {.cdecl.} = 
-    inc cnt
-    return IUP_DEFAULT
-  proc lstProc(w: PIhandle, txt: cstring, itm, state: cint): cint {.cdecl.} =
-    echo "List: text: ",txt, " item: ", itm," is: ",state, " name: ",w.getName()
-    return IUP_DEFAULT
-  proc tgglProc(w: PIhandle, state: cint): cint {.cdecl.} =
-    echo "Toggle: state: ", state
-    return IUP_DEFAULT
-  
-  #iup_appWH("Test app", 300, 250):
-  iup_app("Test app"):
-    notebook(@["Lists","Labels","Edits","Toggles", "Spins"], "top"):
-      flowFrame("Lists: "):
-        list(@["1","2","3","4","5"], lstProc)
-        ddnList(@[1,2,3,4,5], lstProc, editBox=false)
-      flowFrame("A titled flow frame, holding labels and buttons"):
-        label("Wow, some text")
-        label("Top level text ")
-        stacki:
-          buttoni("&Ok", btnOkClick)
-          #option("SIZE", "20x20")
-          #option("expand","horizontal")
-          buttoni("E&xit", btnCancelClick)
-          #option("SIZE", "40x20")
-      flowFrame("Edits: "):
-        text("The rain in Spain\nfalls from the sky", nulTextProc, 
-                multiLine=true, scrollbar="vertical")
-        stack:
-          textLinei("The rain in Japan", password=true)  # , border=false
-          passwordi("The rain in HongKong", border=false)
-          password("The rain in China", border=false)
-      flowFrame("Toggles: "):
-        radioStack:
-          toggle(@["Option 1","Option 2","Option 3"], tgglProc)
-        radioFlowFramei("Radio Flow"):
-          toggle(@["Option 1","Option 2","Option 3"], tgglProc)
-        stacki:
-          toggle(@["Option 1","Option 2","Option 3"], tgglProc)
-      flowframei("Spins: "):
-        spini("26", columns=2)
-        spin("1", spinMin=0, spinMax=5, spinWrap=true)
-    #timer1 = after(5000, tproc)
-    #timer2 = afterOnce(2000, tproc)
-    #timer3 = afterOnce(6000, tStartAgain)
-    whenIdleOnce(idleF)
-    
+
