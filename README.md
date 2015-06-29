@@ -17,8 +17,6 @@ It does not include the canvas which requires the iupcd library.
 
 It covers a fair proportion of widgets, but not all (yet).
 
-Menu and menu items yet to be added.
-
 # known issues
 Lists and toggles get overwritten (some weird memory corruption) when not compiled with -d:release
 
