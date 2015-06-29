@@ -11,14 +11,16 @@ so DO NOT use newer version of IUP until the wrapper in Nim is updated.
 
 # Limitations
 
-This is the first draft, so has had limited testing.  
-
-Only tested on win7 64 bit, so far.
+This is the first draft, so has only been tested on win7 64 bit, so far.
 
 It does not include the canvas which requires the iupcd library.
 
-It covers a fair proportion of widgets, but not all (yet).\
+It covers a fair proportion of widgets, but not all (yet).
+
 Menu and menu items yet to be added.
+
+# known issues
+Lists and toggles get overwritten (some weird memory corruption) when not compiled with -d:release
 
 # Example code  
 
