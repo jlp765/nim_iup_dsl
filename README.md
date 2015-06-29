@@ -17,11 +17,11 @@ Only tested on win7 64 bit, so far.
 
 It does not include the canvas which requires the iupcd library.
 
-It covers a fair proportion of widgets, but not all (yet).
+It covers a fair proportion of widgets, but not all (yet).\
+Menu and menu items yet to be added.
 
 # Example code  
 
-The iup_dsl.nim does not properly work as a module yet.
-
-Modify the test code in iup_dsl.nim to try out the DSL.
+the iup_dsl.nim is INCLUDED rather than imported.
+See the iup_dsl_test.nim file.
 
