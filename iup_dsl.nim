@@ -14,6 +14,7 @@ var
   idleCallbacksIndx: int = 0
   textInitialStr: seq[PIhandle] = @[]
   hasIdle: bool = false
+  menubarVar: PIhandle = nil
   
 proc nulProc*(w:PIhandle): cint {.cdecl, procvar.} = 
   echo "e"
@@ -204,6 +205,8 @@ template iup_app_run(win: PIhandle) : stmt {.immediate.} =
   discard setCallback(win, "CLOSE_CB", toCB(mainQuit))
   if hasIdle:
     discard setFunction("IDLE_ACTION", toCB(doIdleProcessing))
+  if not isNil(menubarVar):
+    win.setAttributeHandle("MENU", menubarVar)
   win.show()
   # set the inital values of text widgets
   for PIh in textInitialStr:
@@ -681,6 +684,7 @@ template notebook*(tabNames = openArray[string], tabType = "top", code: stmt): s
     let x = tb.getChild(i)
     x.option("tabtitle", tabNames[i])
   tb.option("padding","1x1")      # !! warning - needed => causes memory overwriting left as the default 0x0
+  glastWidget = tb
 
 template notebooki*(tabNames = openArray[string], tabType = "top", code: stmt): stmt {.immediate.} =
   let tb = iup.tabs(nil)
@@ -691,6 +695,40 @@ template notebooki*(tabNames = openArray[string], tabType = "top", code: stmt): 
     let x = tb.getChild(i)
     x.option("tabtitle", tabNames[i])
   tb.option("padding","1x1")      # !! warning - needed => causes memory overwriting left as the default 0x0
+  glastWidget = tb
+
+##### menubar 
+
+template menubar*(code: stmt): stmt {.immediate.} =
+  let oldglw = glastWidget
+  menubarVar = iup.menu(nil)    # menubar is top level menu
+  gstack.push(menubarVar)
+  #appendW(menubarVar)
+  menubarVar.apply(code)
+  discard gstack.pop()    # No menu on stack after menu processed
+  glastWidget = oldglw
+
+template menu*(title: string, code: stmt): stmt {.immediate.} =
+  let m = iup.menu(nil)
+  let sm = iup.submenu(title, m)
+  appendW(sm)
+  appendW(m)
+  m.apply(code)
+  discard gstack.pop()    # remove menu of submenu.  Menu hold items for submenu
+  glastWidget = sm
+
+proc item*(title: string, actn = nulProc; autoToggle = false;
+            imageTitle = ""; imageOn = ""; imageOff = ""): PIhandle {.discardable.} =
+  let itm = iup.item(title, nil)
+  if actn != nulProc: 
+    itm.setCallback("ACTION", toCB(actn))
+  appendW(itm)
+  result = glastWidget
+
+proc separator(): PIhandle {.discardable.} =
+  let sep = iup.separator()
+  appendW(sep)
+  result = glastWidget
     
 #####  image
 discard """
@@ -703,4 +741,3 @@ discard """
 """
 proc pass*(n: int = 1) =
    label( "                              " )
-
