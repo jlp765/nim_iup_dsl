@@ -39,6 +39,15 @@ proc tgglProc(w: PIhandle, state: cint): cint {.cdecl, procvar.} =
 proc main() =  
   #iup_appWH("Test app", 300, 250):
   iup_app("Test app"):
+    menubar:
+      menu("&File"):
+        item("&New", btnOkClick)
+        separator()
+        item("E&xit", btnCancelClick)
+      menu("&Help"):
+        item("&Help", btnOkClick)
+        separator()
+        item("&About", btnOkClick)
     notebook(@["Lists","Labels","Edits","Toggles", "Spins"], "top"):
       flowFrame("Lists: "):
         list(@["item1","item2","item3","item4","item5"], lstProc)
